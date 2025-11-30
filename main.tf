@@ -1,33 +1,21 @@
-# Data source to find existing EC2 instance by tag or instance ID
+# main.tf - robust: uploads raw script, creates SG rules for every attached SG id
+
 data "aws_instance" "monitoring_server" {
   instance_id = var.monitoring_instance_id
-
-  # Alternative: filter by tag
-  # filter {
-  #   name   = "tag:Name"
-  #   values = ["monitoring-server"]
-  # }
 }
 
-# User data script for installing Loki, Promtail, and Nginx
-data "template_file" "install_logging_stack" {
-  template = file("${path.module}/install-logging-stack.sh")
-
-  vars = {
-    loki_version     = var.loki_version
-    promtail_version = var.promtail_version
-  }
+# read the install script as raw file (no template interpolation)
+locals {
+  install_script = file("${path.module}/install-logging-stack.sh")
 }
 
-# Create a null resource to execute the installation script
 resource "null_resource" "install_logging_stack" {
-  # Trigger on instance changes or script changes
+  # Trigger when the instance or the script content changes
   triggers = {
     instance_id = data.aws_instance.monitoring_server.id
-    script_hash = md5(data.template_file.install_logging_stack.rendered)
+    script_hash = md5(local.install_script)
   }
 
-  # Connection to EC2 instance
   connection {
     type        = "ssh"
     user        = "ubuntu"
@@ -36,19 +24,19 @@ resource "null_resource" "install_logging_stack" {
     timeout     = "5m"
   }
 
-  # Copy installation script
+  # Upload raw script (no Terraform interpolation)
   provisioner "file" {
-    content     = data.template_file.install_logging_stack.rendered
+    content     = local.install_script
     destination = "/tmp/install-logging-stack.sh"
   }
 
-  # Copy Loki configuration
+  # Upload Loki config (use templatefile for configs that intentionally use TF variables)
   provisioner "file" {
     content     = templatefile("${path.module}/templates/loki-config.yml", {})
     destination = "/tmp/loki-config.yml"
   }
 
-  # Copy Promtail configuration
+  # Upload Promtail config (we inject loki_url)
   provisioner "file" {
     content = templatefile("${path.module}/templates/promtail-config.yml", {
       loki_url = "http://localhost:3100"
@@ -56,39 +44,43 @@ resource "null_resource" "install_logging_stack" {
     destination = "/tmp/promtail-config.yml"
   }
 
-  # Execute installation script
+  # Execute installation script and pass versions as env vars (prevent Terraform from touching script contents)
   provisioner "remote-exec" {
     inline = [
       "chmod +x /tmp/install-logging-stack.sh",
-      "sudo /tmp/install-logging-stack.sh",
-      "sleep 10"
+      "sudo LOKI_VERSION='${var.loki_version}' PROMTAIL_VERSION='${var.promtail_version}' /tmp/install-logging-stack.sh || (sudo journalctl -u loki -n 50; sudo journalctl -u promtail -n 50; exit 1)"
     ]
   }
 }
 
-# Update Security Group to allow Loki port
+# --- Recommended: create one SG rule per attached security group using for_each ---
+# Create ingress rule for Loki (port 3100) across every SG attached to the instance
 resource "aws_security_group_rule" "allow_loki" {
+  for_each = toset(data.aws_instance.monitoring_server.vpc_security_group_ids)
+
   type              = "ingress"
   from_port         = 3100
   to_port           = 3100
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   description       = "Loki"
-  security_group_id = tolist(data.aws_instance.monitoring_server.vpc_security_group_ids)[0]
+  security_group_id = each.value
 }
 
-# Update Security Group to allow Nginx HTTP
+# Create ingress rule for Nginx (port 80) across every SG attached to the instance
 resource "aws_security_group_rule" "allow_nginx_http" {
+  for_each = toset(data.aws_instance.monitoring_server.vpc_security_group_ids)
+
   type              = "ingress"
   from_port         = 80
   to_port           = 80
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   description       = "Nginx HTTP"
-  security_group_id = tolist(data.aws_instance.monitoring_server.vpc_security_group_ids)[0]
+  security_group_id = each.value
 }
 
-# Verify services are running
+# Verify services are running after install
 resource "null_resource" "verify_services" {
   depends_on = [null_resource.install_logging_stack]
 
@@ -115,7 +107,7 @@ resource "null_resource" "verify_services" {
       "curl -s http://localhost:3100/ready || echo 'Loki not ready'",
       "echo ''",
       "echo '=== Testing Nginx ==='",
-      "curl -s http://localhost/ > /dev/null && echo 'Nginx is working' || echo 'Nginx not responding'",
+      "curl -s http://localhost/ > /dev/null && echo 'Nginx is working' || echo 'Nginx not responding'"
     ]
   }
 }
