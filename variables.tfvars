@@ -8,4 +8,3 @@ private_key_path = "./monitoring-key.pem"
 
 loki_version     = "2.9.3"
 promtail_version = "2.9.3"
-
