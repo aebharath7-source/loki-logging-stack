@@ -86,7 +86,7 @@ sudo mv /tmp/promtail-config.yml /etc/promtail/promtail-config.yml
 sudo chown -R promtail:promtail /etc/promtail
 
 # Add promtail user to adm group to read logs
-sudo usermod -aG adm promtail
+sudo usermod -aG adm promtail || true
 
 # Create systemd service
 sudo tee /etc/systemd/system/promtail.service > /dev/null <<'EOF'
@@ -143,10 +143,10 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOF'
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         h1 { color: #333; }
-        .status { 
-            padding: 10px; 
-            margin: 10px 0; 
-            background: #e8f5e9; 
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            background: #e8f5e9;
             border-left: 4px solid #4caf50;
         }
         button {
@@ -159,10 +159,10 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOF'
             border-radius: 5px;
         }
         button:hover { background: #0b7dda; }
-        .log-entry { 
-            background: #f5f5f5; 
-            padding: 10px; 
-            margin: 5px 0; 
+        .log-entry {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 5px 0;
             font-family: monospace;
             font-size: 12px;
         }
@@ -171,24 +171,24 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOF'
 <body>
     <div class="container">
         <h1>🎉 Logging Stack Demo</h1>
-        
+
         <div class="status">
             <strong>✅ Nginx is running!</strong><br>
             Every page load creates a log entry that Promtail sends to Loki.
         </div>
-        
+
         <h2>Generate Logs:</h2>
         <button onclick="generateLog('info')">Generate INFO Log</button>
         <button onclick="generateLog('error')">Generate ERROR Log</button>
         <button onclick="generateLog('multiple')">Generate 10 Logs</button>
-        
+
         <h2>Service URLs:</h2>
         <ul>
             <li><a href="http://localhost:3000" target="_blank">Grafana (Port 3000)</a></li>
             <li><a href="http://localhost:9090" target="_blank">Prometheus (Port 9090)</a></li>
             <li><a href="http://localhost:3100/ready" target="_blank">Loki (Port 3100)</a></li>
         </ul>
-        
+
         <h2>Quick Start:</h2>
         <ol>
             <li>Open Grafana and add Loki data source: <code>http://localhost:3100</code></li>
@@ -196,15 +196,15 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOF'
             <li>Query: <code>{job="nginx"}</code> or <code>{filename="/var/log/nginx/access.log"}</code></li>
             <li>Click buttons above to generate logs and see them in Grafana!</li>
         </ol>
-        
+
         <div id="logs"></div>
     </div>
-    
+
     <script>
         function generateLog(type) {
             const logsDiv = document.getElementById('logs');
             const timestamp = new Date().toISOString();
-            
+
             if (type === 'multiple') {
                 for (let i = 0; i < 10; i++) {
                     fetch('/api/log?type=batch&id=' + i);
@@ -215,7 +215,7 @@ sudo tee /var/www/html/index.html > /dev/null <<'EOF'
                 logsDiv.innerHTML = '<div class="log-entry">' + timestamp + ' - Generated ' + type.toUpperCase() + ' log</div>' + logsDiv.innerHTML;
             }
         }
-        
+
         // Auto-refresh every 5 seconds to generate logs
         setInterval(() => {
             fetch('/healthcheck');
