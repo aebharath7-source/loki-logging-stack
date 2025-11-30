@@ -74,7 +74,7 @@ resource "aws_security_group_rule" "allow_loki" {
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   description       = "Loki"
-  security_group_id = data.aws_instance.monitoring_server.vpc_security_group_ids[0]
+  security_group_id = tolist(data.aws_instance.monitoring_server.vpc_security_group_ids)[0]
 }
 
 # Update Security Group to allow Nginx HTTP
@@ -85,7 +85,7 @@ resource "aws_security_group_rule" "allow_nginx_http" {
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   description       = "Nginx HTTP"
-  security_group_id = data.aws_instance.monitoring_server.vpc_security_group_ids[0]
+  security_group_id = tolist(data.aws_instance.monitoring_server.vpc_security_group_ids)[0]
 }
 
 # Verify services are running
